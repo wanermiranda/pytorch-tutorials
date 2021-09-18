@@ -29,14 +29,14 @@ class NeuralNetwork(nn.Module):
         self._send_to_device(device=device)
 
     def _build_stack(self, layout):
+        self._layout = layout
         stack = []
         for i in range(len(self._layout) - 1):
             stack.append(nn.Linear(self._layout[i], self._layout[i + 1]))
             if i + 1 < len(self._layout) - 1:
                 stack.append(nn.ReLU())
 
-        self._linear_relu_stack = nn.Sequential(**stack)
-        self._layout = layout
+        self._linear_relu_stack = nn.Sequential(*stack)
 
     def _send_to_device(self, device="cuda"):
         self._device = (
