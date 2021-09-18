@@ -33,3 +33,6 @@ wget
 gym
 gym-super-mario-bros==7.3.0
 timm
+black
+mypy
+pytest

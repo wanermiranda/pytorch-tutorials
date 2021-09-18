@@ -1,2 +1,4 @@
 notebooks/data/
 *.pth
+src/
+.vscode/
