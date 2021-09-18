@@ -8,3 +8,6 @@ neat:
 	black wompth tests
 	isort wompth/ tests/
 	mypy wompth/ tests/
+
+tests: neat
+	python -m pytest -s -vv tests/
