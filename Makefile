@@ -5,5 +5,6 @@ requirements:
 	pip install -r requirements.txt
 
 neat:
-	black wompth
-	mypy wompth/
+	black wompth tests
+	isort wompth/ tests/
+	mypy wompth/ tests/

@@ -1,10 +1,11 @@
 from functools import partial
 from typing import List
+
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets
-from torchvision.transforms import ToTensor, Lambda, Compose
+from torchvision.transforms import Compose, Lambda, ToTensor
 
 
 class NeuralNetwork(nn.Module):
@@ -85,18 +86,18 @@ class NeuralNetwork(nn.Module):
                 print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
     def _test(self, test_loader: DataLoader):
-        size = len(test_loader.dataset) # type : ignore
+        size = len(test_loader.dataset)  # type: ignore
         num_batches = len(test_loader)
         self.eval()
-        test_loss, correct = 0, 0
+        test_loss, correct = 0.0, 0.0
         with torch.no_grad():
             for X, y in test_loader:
                 X, y = X.to(self._device), y.to(self._device)
                 pred = self(X)
                 test_loss += self._loss_fn(pred, y).item()
                 correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-        test_loss /= num_batches
-        correct /= size
+        test_loss /= float(num_batches)
+        correct /= float(size)
         print(
             f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
         )
