@@ -108,35 +108,43 @@ class NeuralNetwork(nn.Module):
             data_loader (DataLoader): Data set with features X and labels y
         """
 
-        result_set, avg_loss, accuracy = self._predict(data_loader)
+        result_set, _, _ = self._predict(data_loader)
 
-        # if len(self._class_labels):
-        #     labels =
+        labels = result_set.tolist()
 
-        print(
-            f"Test Error: \n Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {avg_loss:>8f} \n"
-        )
+        if len(self._class_labels):
+            labels = list(map(lambda i, labels=self._class_labels: labels[i], labels))
+        
+        return labels
 
-    def _predict(self, test_loader: DataLoader) -> Tuple[torch.Tensor, float, float]:
-        size = len(test_loader.dataset)  # type: ignore
-        num_batches = len(test_loader)
+    def _predict(self, data_loader: DataLoader) -> Tuple[torch.Tensor, float, float]:
+        """Given a set eval all the predictions and returns the classes, accuracy and loss
+
+        Args:
+            data_loader (DataLoader): Data set with features X and labels y
+
+        Returns:
+            Tuple[torch.Tensor, float, float]: classes, accuracy and loss
+        """
+        size = len(data_loader.dataset)  # type: ignore
+        num_batches = len(data_loader)
         total_loss, correct_samples = 0.0, 0.0
         avg_loss, accuracy = 0.0, 0.0
         self.eval()
 
         with torch.no_grad():
             result_set = torch.tensor([], dtype=torch.int32, device=self._device)
-            for X, y in test_loader:
+            for X, y in data_loader:
                 X, y = X.to(self._device), y.to(self._device)
                 pred = self(X)
 
-                y_ = (pred.argmax(1) == y).type(torch.float)
+                y_ = pred.argmax(1)
                 result_set = torch.cat([result_set, y_.type(torch.int32)], dim=0)
 
                 total_loss += self._loss_fn(pred, y).item()
-                correct_samples += y_.sum().item()
+                correct_samples +=  (y_== y).type(torch.float).sum().item()
 
-        avg_loss /= float(num_batches)
-        accuracy /= float(size)
+        avg_loss = total_loss / float(num_batches)
+        accuracy = correct_samples / float(size)
 
         return result_set, avg_loss, accuracy
