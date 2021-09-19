@@ -12,7 +12,7 @@ from torchvision.transforms import Compose, Lambda, ToTensor
 class NeuralNetwork(nn.Module):
     def __init__(
         self,
-        layout: List[float] = [28 * 28, 512, 512, 10],
+        layout: List[float] = [],
         device="cuda",
         loss_fn=nn.CrossEntropyLoss(),
         optimizer_partial=partial(torch.optim.SGD, lr=1e-3),
@@ -29,11 +29,13 @@ class NeuralNetwork(nn.Module):
         self._loss_fn = loss_fn
         self._optimizer_partial = optimizer_partial
         self._class_labels = class_labels
-        self._build_stack(layout=layout)
-        self._send_to_device(device=device)
-
-    def _build_stack(self, layout):
         self._layout = layout
+        self._device = device
+        if len(layout):
+            self._build_stack()
+            self._send_to_device(device=device)
+
+    def _build_stack(self):
         stack = []
         for i in range(len(self._layout) - 1):
             stack.append(nn.Linear(self._layout[i], self._layout[i + 1]))
@@ -148,3 +150,24 @@ class NeuralNetwork(nn.Module):
         accuracy = correct_samples / float(size)
 
         return result_set, avg_loss, accuracy
+
+    def save(self, path: str):
+        file_dict = {
+            "state": self.state_dict(),
+            "_class_labels": self._class_labels,
+            "_layout": self._layout,
+            "_device": self._device,
+            "_optimizer_partial": self._optimizer_partial,
+            "_loss_fn": self._loss_fn,
+        }
+        torch.save(file_dict, path)
+
+    def load(self, path: str):
+        file_dict = torch.load(path)
+        for attr in file_dict.keys():
+            if hasattr(self, attr) and attr.startswith("_"):
+                setattr(self, attr, file_dict[attr])
+
+        self._build_stack()
+        self.load_state_dict(file_dict["state"])
+        self._send_to_device(device=self._device)
