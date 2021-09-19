@@ -95,14 +95,15 @@ class DQN(BaseNetwork):
                 conv_h = DQN.conv2d_size_out(
                     conv_h, kernel_size=layer.kernel_size, stride=layer.stride
                 )
-
+        self._network_stack = []
         # Setting the network layers
         for i, layer in enumerate(stack):
-            setattr(self, f"_{type(layer).__name__}_{i//2}", layer)
+            layer_name = f"_{type(layer).__name__}_{i//2}"
+            setattr(self, layer_name, layer)
+            self._network_stack.append(layer_name)
 
         self._linear_input_size = conv_w * conv_h * self._layout[-1].batch_norm
         self._head = nn.Linear(self._linear_input_size, self._outputs)
-        self._network_stack = stack
 
     @staticmethod
     def conv2d_size_out(size, kernel_size=5, stride=2):
@@ -110,9 +111,9 @@ class DQN(BaseNetwork):
 
     def forward(self, x):
         x = x.to(self._device)
-        for i in range(len(self._network_stack) / 2):
-            batch_norm = self._network_stack[i + 1]
-            conv = self._network_stack[i]
+        for i in range(0, len(self._network_stack), 2):
+            batch_norm = getattr(self, self._network_stack[i + 1])
+            conv = getattr(self, self._network_stack[i])
             x = self._activation_func(batch_norm(conv(x)))
 
         return self._head(x.view(x.size(0), -1))

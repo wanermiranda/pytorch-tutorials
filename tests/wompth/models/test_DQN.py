@@ -28,17 +28,18 @@ def test_memory():
     assert(type(transitions[0]) == Transition)
 
 def test_forward():
+    path = './resources/tests/memory.pth'
+    saved_memory = torch.load(path)
+    state = saved_memory[0].state
 
     layout = [
         LayerConf(input=3, kernel_size=5, stride=2, batch_norm=16),
         LayerConf(input=16, kernel_size=5, stride=2, batch_norm=32),
         LayerConf(input=32, kernel_size=5, stride=2, batch_norm=32),
     ]
-    dqn = DQN(
-        layout=layout,
-        screen_dims=ScreenDims(40, 90),
-        outputs=2,
-    )
+    dqn = DQN(layout=layout, screen_dims=ScreenDims(40, 90), outputs=2)
+    
     dqn.eval()
-
-    assert False
+    baseline = torch.tensor([[0.06198882311582565, 0.14884909987449646]]).to(dqn._device)
+    result = dqn(state)
+    assert torch.allclose(result, baseline, atol=1e-8)
