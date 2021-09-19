@@ -50,20 +50,22 @@ def test_predict(training_loader_fMNIST, testing_loader_fMNIST):
     nn = NeuralNetwork(layout=[28 * 28, 256, 256, 10], class_labels=classes)
 
     nn.fit(
-        train_loader=training_loader_fMNIST, test_loader=testing_loader_fMNIST, epochs=10
+        train_loader=training_loader_fMNIST,
+        test_loader=testing_loader_fMNIST,
+        epochs=10,
     )
 
     result = nn.predict(testing_loader_fMNIST)
-    
+
     assert len(result) == len(testing_loader_fMNIST.dataset)
 
     correct_guesses = 0
     for i in range(10):
 
         y = testing_loader_fMNIST.dataset[i][1]
-        if result[i] == classes[y]: 
+        if result[i] == classes[y]:
             correct_guesses += 1
-        print(f'guess={result[i]}, true={classes[y]}')
-    
-    print(f'Correct guesses {correct_guesses} out of 10')
+        print(f"guess={result[i]}, true={classes[y]}")
+
+    print(f"Correct guesses {correct_guesses} out of 10")
     assert correct_guesses >= 5
