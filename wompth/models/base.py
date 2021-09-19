@@ -28,6 +28,23 @@ class BaseNetwork(nn.Module):
     def _build_stack(self):
         """"""
 
+    def fill_weights(self, uniform=False, weight=0.42):
+        fill_func = partial(BaseNetwork._fill_weights, uniform=uniform, weight=weight)
+        self.apply(fill_func)
+
+    @staticmethod
+    def _fill_weights(m, uniform=False, weight=0.42):
+        classname = m.__class__.__name__
+        # for every Linear layer in a model..
+        if classname.find("Linear") != -1:
+            # apply a uniform distribution to the weights and a bias=0
+            if uniform:
+                m.weight.data.uniform_(0.0, 1.0)
+            else:
+                m.weight.data.fill_(weight)
+
+            m.bias.data.fill_(0)
+
     def _compile(self, device):
         if len(self._layout):
             self._build_stack()

@@ -1,5 +1,10 @@
-from wompth.models.dqn import DQN, LayerConf, ReplayMemory, ScreenDims, Transition
+import random
+
+import numpy as np
 import torch
+
+from wompth.models.dqn import DQN, LayerConf, ReplayMemory, ScreenDims, Transition
+
 
 def test_network_size():
     layout = [
@@ -17,18 +22,24 @@ def test_network_size():
         == "DQN(\n  (_Conv2d_0): Conv2d(3, 16, kernel_size=(5, 5), stride=(2, 2))\n  (_BatchNorm2d_0): BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)\n  (_Conv2d_1): Conv2d(16, 32, kernel_size=(5, 5), stride=(2, 2))\n  (_BatchNorm2d_1): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)\n  (_Conv2d_2): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))\n  (_BatchNorm2d_2): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)\n  (_head): Linear(in_features=512, out_features=2, bias=True)\n)"
     )
 
+
 def test_memory():
-    path = './resources/tests/memory.pth'
+    path = "./resources/tests/memory.pth"
     saved_memory = torch.load(path)
     memory2 = ReplayMemory(128)
     memory2.memory = saved_memory
     transitions = memory2.sample(10)
 
     assert len(transitions) == 10
-    assert(type(transitions[0]) == Transition)
+    assert type(transitions[0]) == Transition
+
 
 def test_forward():
-    path = './resources/tests/memory.pth'
+    torch.manual_seed(0)
+    random.seed(0)
+    np.random.seed(0)
+
+    path = "./resources/tests/memory.pth"
     saved_memory = torch.load(path)
     state = saved_memory[0].state
 
@@ -38,8 +49,8 @@ def test_forward():
         LayerConf(input=32, kernel_size=5, stride=2, batch_norm=32),
     ]
     dqn = DQN(layout=layout, screen_dims=ScreenDims(40, 90), outputs=2)
-    
-    dqn.eval()
-    baseline = torch.tensor([[0.06198882311582565, 0.14884909987449646]]).to(dqn._device)
+    dqn.fill_weights()
+    baseline = torch.tensor([[72.41523742675781, 72.41523742675781]]).to(dqn._device)
     result = dqn(state)
+    print(result.tolist())
     assert torch.allclose(result, baseline, atol=1e-8)
