@@ -10,4 +10,4 @@ neat:
 	mypy wompth/ tests/
 
 tests: neat
-	python -m pytest -s -vv tests/
+	python -m pytest -s -vv --cov=wompth --cov-report term-missing tests/

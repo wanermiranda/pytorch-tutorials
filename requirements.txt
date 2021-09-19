@@ -36,3 +36,4 @@ timm
 black
 mypy
 pytest
+pytest-cov

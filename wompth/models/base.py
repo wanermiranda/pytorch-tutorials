@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from functools import partial
 from typing import Any, List, Tuple
 
@@ -9,7 +10,31 @@ from torchvision import datasets
 from torchvision.transforms import Compose, Lambda, ToTensor
 
 
-class NeuralNetwork(nn.Module):
+class BaseNetwork(nn.Module):
+    def __init__(self, device="cuda"):
+        super().__init__()
+        self._device = device
+
+    def _send_to_device(self, device="cuda"):
+        self._device = (
+            "cuda" if torch.cuda.is_available() and device == "cuda" else "cpu"
+        )
+        self.to(device)
+        if hasattr(self, "_optimizer_partial"):
+            self._optimizer = self._optimizer_partial(self.parameters())
+        print("Using {} device".format(self._device))
+
+    @abstractmethod
+    def _build_stack(self):
+        """"""
+
+    def _compile(self, device):
+        if len(self._layout):
+            self._build_stack()
+            self._send_to_device(device=device)
+
+
+class NeuralNetwork(BaseNetwork):
     def __init__(
         self,
         layout: List[float] = [],
@@ -24,16 +49,13 @@ class NeuralNetwork(nn.Module):
             layout (List[float], optional): Network layout layer sizes and outputs in order. Defaults to [28*28, 512, 512, 10].
             device (str, optional): Device in wich the NN will run (cpu, cuda). Defaults to "cuda".
         """
-        super(NeuralNetwork, self).__init__()
+        super().__init__(device)
         self._flatten = nn.Flatten()
         self._loss_fn = loss_fn
         self._optimizer_partial = optimizer_partial
         self._class_labels = class_labels
         self._layout = layout
-        self._device = device
-        if len(layout):
-            self._build_stack()
-            self._send_to_device(device=device)
+        self._compile(device)
 
     def _build_stack(self):
         stack = []
@@ -42,19 +64,11 @@ class NeuralNetwork(nn.Module):
             if i + 1 < len(self._layout) - 1:
                 stack.append(nn.ReLU())
 
-        self._linear_relu_stack = nn.Sequential(*stack)
-
-    def _send_to_device(self, device="cuda"):
-        self._device = (
-            "cuda" if torch.cuda.is_available() and device == "cuda" else "cpu"
-        )
-        self.to(device)
-        self._optimizer = self._optimizer_partial(self.parameters())
-        print("Using {} device".format(self._device))
+        self._network_stack = nn.Sequential(*stack)
 
     def forward(self, x):
         x = self._flatten(x)
-        logits = self._linear_relu_stack(x)
+        logits = self._network_stack(x)
         return logits
 
     def fit(self, train_loader: DataLoader, test_loader: DataLoader = None, epochs=5):
