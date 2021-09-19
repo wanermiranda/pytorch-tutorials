@@ -1,5 +1,5 @@
 from functools import partial
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import torch
 from torch import nn
