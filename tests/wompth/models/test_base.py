@@ -1,7 +1,16 @@
+import os
+import shutil
+
 import pytest
-from torch._C import layout
 
 from wompth.models.base import NeuralNetwork
+
+
+@pytest.fixture
+def model_path():
+    path = os.path.join(os.getcwd(), "model_test.pth")
+    yield path
+    os.remove(path)
 
 
 def test_model_build():
@@ -52,20 +61,67 @@ def test_predict(training_loader_fMNIST, testing_loader_fMNIST):
     nn.fit(
         train_loader=training_loader_fMNIST,
         test_loader=testing_loader_fMNIST,
-        epochs=10,
+        epochs=5,
     )
 
     result = nn.predict(testing_loader_fMNIST)
 
     assert len(result) == len(testing_loader_fMNIST.dataset)
 
+    correct_guesses = count_guesses(testing_loader_fMNIST, classes, result)
+
+    print(f"Correct guesses {correct_guesses} out of 10")
+    assert correct_guesses >= 5
+
+
+def test_load_save(training_loader_fMNIST, testing_loader_fMNIST, model_path):
+    classes = [
+        "T-shirt/top",
+        "Trouser",
+        "Pullover",
+        "Dress",
+        "Coat",
+        "Sandal",
+        "Shirt",
+        "Sneaker",
+        "Bag",
+        "Ankle boot",
+    ]
+
+    nn = NeuralNetwork(layout=[28 * 28, 256, 256, 10], class_labels=classes)
+
+    nn.fit(
+        train_loader=training_loader_fMNIST,
+        test_loader=testing_loader_fMNIST,
+        epochs=5,
+    )
+    nn.save(model_path)
+
+    result = nn.predict(testing_loader_fMNIST)
+    assert len(result) == len(testing_loader_fMNIST.dataset)
+    correct_guesses = count_guesses(testing_loader_fMNIST, classes, result)
+    assert correct_guesses >= 5
+
+    nn_loaded = NeuralNetwork()
+    nn_loaded.load(model_path)
+
+    result_loaded = nn_loaded.predict(testing_loader_fMNIST)
+    assert len(result_loaded) == len(testing_loader_fMNIST.dataset)
+    correct_guesses = count_guesses(testing_loader_fMNIST, classes, result_loaded)
+    assert correct_guesses >= 5
+
+    assert result == result_loaded
+    assert nn._layout == nn_loaded._layout
+    assert nn._device == nn_loaded._device
+    assert nn._class_labels == nn_loaded._class_labels
+
+
+def count_guesses(testing_loader_fMNIST, classes, result):
     correct_guesses = 0
     for i in range(10):
-
         y = testing_loader_fMNIST.dataset[i][1]
         if result[i] == classes[y]:
             correct_guesses += 1
         print(f"guess={result[i]}, true={classes[y]}")
 
-    print(f"Correct guesses {correct_guesses} out of 10")
-    assert correct_guesses >= 5
+    return correct_guesses
