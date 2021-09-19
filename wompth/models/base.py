@@ -113,8 +113,8 @@ class NeuralNetwork(nn.Module):
         labels = result_set.tolist()
 
         if len(self._class_labels):
-            labels = list(map(lambda i, labels=self._class_labels: labels[i], labels))
-        
+            labels = list(map(lambda i, labels=self._class_labels: labels[i], labels))  # type: ignore
+
         return labels
 
     def _predict(self, data_loader: DataLoader) -> Tuple[torch.Tensor, float, float]:
@@ -142,7 +142,7 @@ class NeuralNetwork(nn.Module):
                 result_set = torch.cat([result_set, y_.type(torch.int32)], dim=0)
 
                 total_loss += self._loss_fn(pred, y).item()
-                correct_samples +=  (y_== y).type(torch.float).sum().item()
+                correct_samples += (y_ == y).type(torch.float).sum().item()
 
         avg_loss = total_loss / float(num_batches)
         accuracy = correct_samples / float(size)
