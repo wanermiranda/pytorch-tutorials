@@ -1,8 +1,9 @@
 from functools import partial
-from typing import List
+from typing import List, Tuple
 
 import torch
 from torch import nn
+from torch.functional import Tensor
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import Compose, Lambda, ToTensor
@@ -15,6 +16,7 @@ class NeuralNetwork(nn.Module):
         device="cuda",
         loss_fn=nn.CrossEntropyLoss(),
         optimizer_partial=partial(torch.optim.SGD, lr=1e-3),
+        class_labels: List[str] = [],
     ):
         """Starts a simple mlp using pytorch, following the layout provided and ReLu as a default activation function.
 
@@ -26,6 +28,7 @@ class NeuralNetwork(nn.Module):
         self._flatten = nn.Flatten()
         self._loss_fn = loss_fn
         self._optimizer_partial = optimizer_partial
+        self._class_labels = class_labels
         self._build_stack(layout=layout)
         self._send_to_device(device=device)
 
@@ -86,18 +89,54 @@ class NeuralNetwork(nn.Module):
                 print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
     def _test(self, test_loader: DataLoader):
+        """Test the network using the dataset passed using a dataloder
+
+        Args:
+            test_loader (DataLoader): Test set with features X and labels y
+        """
+
+        _, avg_loss, accuracy = self._predict(test_loader)
+
+        print(
+            f"Test Error: \n Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {avg_loss:>8f} \n"
+        )
+
+    def predict(self, data_loader: DataLoader):
+        """Test the network using the dataset passed using a dataloder
+
+        Args:
+            data_loader (DataLoader): Data set with features X and labels y
+        """
+
+        result_set, avg_loss, accuracy = self._predict(data_loader)
+
+        # if len(self._class_labels):
+        #     labels =
+
+        print(
+            f"Test Error: \n Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {avg_loss:>8f} \n"
+        )
+
+    def _predict(self, test_loader: DataLoader) -> Tuple[torch.Tensor, float, float]:
         size = len(test_loader.dataset)  # type: ignore
         num_batches = len(test_loader)
+        total_loss, correct_samples = 0.0, 0.0
+        avg_loss, accuracy = 0.0, 0.0
         self.eval()
-        test_loss, correct = 0.0, 0.0
+
         with torch.no_grad():
+            result_set = torch.tensor([], dtype=torch.int32, device=self._device)
             for X, y in test_loader:
                 X, y = X.to(self._device), y.to(self._device)
                 pred = self(X)
-                test_loss += self._loss_fn(pred, y).item()
-                correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-        test_loss /= float(num_batches)
-        correct /= float(size)
-        print(
-            f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
-        )
+
+                y_ = (pred.argmax(1) == y).type(torch.float)
+                result_set = torch.cat([result_set, y_.type(torch.int32)], dim=0)
+
+                total_loss += self._loss_fn(pred, y).item()
+                correct_samples += y_.sum().item()
+
+        avg_loss /= float(num_batches)
+        accuracy /= float(size)
+
+        return result_set, avg_loss, accuracy
