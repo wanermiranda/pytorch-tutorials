@@ -28,6 +28,7 @@ def test_forward():
         layout=layout,
         screen_dims=ScreenDims(40, 90),
         outputs=2,
-        optimizer_partial=optim.RMSprop,
     )
     dqn.eval()
+
+    assert False
