@@ -50,7 +50,9 @@ class BaseNetwork(nn.Module):
             self._build_stack()
             self._send_to_device(device=device)
 
-
+    def update_states(self, source_net):
+        self.load_state_dict(source_net.state_dict())
+        
 class NeuralNetwork(BaseNetwork):
     def __init__(
         self,
@@ -202,3 +204,4 @@ class NeuralNetwork(BaseNetwork):
         self._build_stack()
         self.load_state_dict(file_dict["state"])
         self._send_to_device(device=self._device)
+

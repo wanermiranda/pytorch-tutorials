@@ -23,7 +23,7 @@ ScreenDims = namedtuple("ScreenDims", ("height", "width"))
 
 @dataclass
 class DQNConf:
-    BATCH_SIZE: float = 64
+    BATCH_SIZE: float = 128
     GAMMA: float = 0.95
     EPS_START: float = 1.0
     EPS_MIN: float = 0.001
@@ -257,12 +257,16 @@ class DQN(BaseNetwork):
             # Update the target network, copying all weights and biases in DQN
             if len(episode_durations) > min_duration:
                 mv_avg = moving_average_pth(episode_durations, min_duration).max()
-                update_target = t >= mv_avg
+                update_target = t > mv_avg
             else: 
                 mv_avg = 0.
                 update_target = True
 
             if  update_target:
-                print(f'target updated {mv_avg:.2}')
-                target_net.load_state_dict(policy_net.state_dict())
+                print(f'target updated {mv_avg:.2f}')
+                target_net.update_states(policy_net)
+            elif policy_net._epsilon <= policy_net._conf.EPS_MIN: 
+                policy_net.update_states(target_net)
+                policy_net._epsilon = policy_net._conf.EPS_START
+
         return episode_durations
