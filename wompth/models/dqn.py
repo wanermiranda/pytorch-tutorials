@@ -1,30 +1,36 @@
+import math
 import random
 from collections import deque, namedtuple
-from functools import partial
-from typing import List, NamedTuple, Tuple
 from dataclasses import dataclass
+from functools import partial
+from itertools import count
+from typing import Callable, List, NamedTuple, Tuple
+
+import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from torch import nn
-import torch
-import math
 from gym.core import Env
+from torch import nn
+
 from wompth.models.base import BaseNetwork
-from itertools import count
 
 Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
 
 LayerConf = namedtuple("LayerConf", ("input", "kernel_size", "stride", "batch_norm"))
 
 ScreenDims = namedtuple("ScreenDims", ("height", "width"))
+
+
 @dataclass
 class DQNConf:
-    BATCH_SIZE:float = 128
-    GAMMA:float = 0.999
-    EPS_START:float = 0.9
-    EPS_END:float = 0.05
-    EPS_DECAY:int = 200
-    TARGET_UPDATE:int = 10
+    BATCH_SIZE: float = 64
+    GAMMA: float = 0.95
+    EPS_START: float = 1.0
+    EPS_MIN: float = 0.001
+    EPS_DECAY: int = 0.999
+    TARGET_UPDATE: int = 10
+
+
 class ReplayMemory(object):
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
@@ -44,13 +50,13 @@ class DQN(BaseNetwork):
     def __init__(
         self,
         device="cuda",
-        conf:DQNConf = DQNConf(),
+        conf: DQNConf = DQNConf(),
         layout: List[LayerConf] = [],
         screen_dims: ScreenDims = ScreenDims(height=0, width=0),
         outputs: float = 0,
         activation_func=partial(F.relu),
         optimizer_partial=partial(optim.RMSprop),
-        memory = ReplayMemory(10000)
+        memory=ReplayMemory(10000),
     ):
         super().__init__(device=device)
         self._layout: List[LayerConf] = layout
@@ -59,6 +65,7 @@ class DQN(BaseNetwork):
         self._activation_func = activation_func
         self._conf = conf
         self._steps_done = 0
+        self._epsilon = conf.EPS_START
         self._optimizer_partial = optimizer_partial
         self._memory = memory
         self._compile(self._device)
@@ -133,21 +140,26 @@ class DQN(BaseNetwork):
 
         return self._head(x.view(x.size(0), -1))
 
-    # to be used in the policy network
-    def select_action(self, state):
+
+    def select_action(self, state): 
         sample = random.random()
         conf = self._conf
-        eps_threshold = conf.EPS_END + (conf.EPS_START - conf.EPS_END) * \
-            math.exp(-1. * self._steps_done / conf.EPS_DECAY)
-        self._steps_done += 1
-        if sample > eps_threshold:
+        if self._epsilon > conf.EPS_MIN:
+            self._epsilon *= conf.EPS_DECAY
+
+        if sample > self._epsilon:
             with torch.no_grad():
                 # pick action with the larger expected reward.
                 return self(state).max(1)[1].view(1, 1)
         else:
-            return torch.tensor([[random.randrange(self._outputs)]], device=self._device, dtype=torch.long)
+            return torch.tensor(
+                [[random.randrange(self._outputs)]],
+                device=self._device,
+                dtype=torch.long,
+            )
 
-    def optimize_model(self, target_net, criterion = nn.SmoothL1Loss()):
+        
+    def optimize_model(self, target_net, criterion=nn.SmoothL1Loss()):
         conf = self._conf
         if len(self._memory) < conf.BATCH_SIZE:
             return
@@ -159,10 +171,14 @@ class DQN(BaseNetwork):
 
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                            batch.next_state)), device=self._device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state
-                                                    if s is not None])
+        non_final_mask = torch.tensor(
+            tuple(map(lambda s: s is not None, batch.next_state)),
+            device=self._device,
+            dtype=torch.bool,
+        )
+        non_final_next_states = torch.cat(
+            [s for s in batch.next_state if s is not None]
+        )
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
@@ -178,7 +194,9 @@ class DQN(BaseNetwork):
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(conf.BATCH_SIZE, device=self._device)
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
+        next_state_values[non_final_mask] = (
+            target_net(non_final_next_states).max(1)[0].detach()
+        )
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * conf.GAMMA) + reward_batch
 
@@ -192,11 +210,18 @@ class DQN(BaseNetwork):
             param.grad.data.clamp_(-1, 1)
         self._optimizer.step()
 
-
     @staticmethod
-    def fit_networks(policy_net, target_net, env:Env, get_screen:callable, num_episodes=600) -> List: 
-        episode_durations = []
+    def fit_networks(
+        policy_net, target_net, env: Env, get_screen: Callable, num_episodes=600, min_duration = 10, episode_durations = []
+    ) -> List:
+        def moving_average_pth(x, w=10):
+            kernel = [1/w] * w
+            ts_tensor = torch.Tensor(x).reshape(1, 1, -1)
+            kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
+            return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
+        
         device = policy_net._device
+        
         for i_episode in range(num_episodes):
             # Initialize the environment and state
             env.reset()
@@ -227,8 +252,17 @@ class DQN(BaseNetwork):
                 policy_net.optimize_model(target_net)
                 if done:
                     episode_durations.append(t + 1)
+                    print(f"e: {policy_net._epsilon:.2}")
                     break
             # Update the target network, copying all weights and biases in DQN
-            if i_episode % policy_net._conf.TARGET_UPDATE == 0:
+            if len(episode_durations) > min_duration:
+                mv_avg = moving_average_pth(episode_durations, min_duration).max()
+                update_target = t >= mv_avg
+            else: 
+                mv_avg = 0.
+                update_target = True
+
+            if  update_target:
+                print(f'target updated {mv_avg:.2}')
                 target_net.load_state_dict(policy_net.state_dict())
         return episode_durations
