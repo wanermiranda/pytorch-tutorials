@@ -65,7 +65,7 @@ class DQN(BaseNetwork):
         self._activation_func = activation_func
         self._conf = conf
         self._steps_done = 0
-        self._epsilon = conf.EPS_START
+        self._epsilon  = conf.EPS_START
         self._optimizer_partial = optimizer_partial
         self._memory = memory
         self._compile(self._device)
@@ -144,7 +144,7 @@ class DQN(BaseNetwork):
     def select_action(self, state): 
         sample = random.random()
         conf = self._conf
-        if self._epsilon > conf.EPS_MIN:
+        if self._epsilon  > conf.EPS_MIN:
             self._epsilon *= conf.EPS_DECAY
 
         if sample > self._epsilon:
@@ -220,6 +220,9 @@ class DQN(BaseNetwork):
             kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
             return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
         
+        if not target_net:
+            target_net = policy_net
+
         def reward_function_local(done, t, step_reward=50):
             reward = 0
             
