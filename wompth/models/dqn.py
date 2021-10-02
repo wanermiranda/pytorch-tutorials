@@ -219,9 +219,6 @@ class DQN(BaseNetwork):
             ts_tensor = torch.Tensor(x).reshape(1, 1, -1)
             kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
             return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
-        
-        if not target_net:
-            target_net = policy_net
 
         def reward_function_local(done, t, step_reward=50):
             reward = 0
@@ -234,6 +231,9 @@ class DQN(BaseNetwork):
                 reward = t
             
             return reward 
+
+        if not target_net:
+            target_net = policy_net
 
         device = policy_net._device
         
@@ -277,15 +277,16 @@ class DQN(BaseNetwork):
             # Update the target network, copying all weights and biases in DQN
             if len(episode_durations) > min_duration:
                 mv_avg = moving_average_pth(episode_durations, min_duration).max()
-                update_target = True
+                update_target = t > mv_avg
             else: 
                 mv_avg = 0.
                 update_target = True
 
-        if  update_target:
-            print(f'target updated {mv_avg:.3f}')
-            target_net.load_states_from(policy_net)
-        elif policy_net._epsilon <= policy_net._conf.EPS_MIN: 
+            if  update_target and update_target:
+                print(f'target updated {mv_avg:.3f}')
+                target_net.load_states_from(policy_net)
+
+        if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
             policy_net.load_states_from(target_net)
             policy_net._epsilon = policy_net._conf.EPS_START
 
