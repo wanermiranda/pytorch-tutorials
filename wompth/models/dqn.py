@@ -24,7 +24,7 @@ ScreenDims = namedtuple("ScreenDims", ("height", "width"))
 @dataclass
 class DQNConf:
     BATCH_SIZE: float = 128
-    GAMMA: float = 0.95
+    GAMMA: float = 0.99
     EPS_START: float = 1.0
     EPS_MIN: float = 0.001
     EPS_DECAY: int = 0.999
@@ -212,7 +212,7 @@ class DQN(BaseNetwork):
 
     @staticmethod
     def fit_networks(
-        policy_net, target_net, env: Env, get_screen: Callable, num_episodes=600, min_duration = 10, episode_durations = []
+        policy_net, target_net, env: Env, get_screen: Callable, num_episodes=600, min_duration = 5, episode_durations = [], reward_function=None
     ) -> List:
         def moving_average_pth(x, w=10):
             kernel = [1/w] * w
@@ -220,7 +220,21 @@ class DQN(BaseNetwork):
             kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
             return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
         
+        def reward_function_local(done, t, step_reward=50):
+            reward = 0
+            
+            if done and t < step_reward:
+                reward =  step_reward - (t * 0.5) # discounted half of the steps
+            elif t >= step_reward: 
+                reward = t * ((step_reward // t)+1) # promote the reward in steps 
+            else: 
+                reward = t
+            
+            return reward 
+
         device = policy_net._device
+        
+        reward_function = reward_function_local
         
         for i_episode in range(num_episodes):
             # Initialize the environment and state
@@ -232,6 +246,9 @@ class DQN(BaseNetwork):
                 # Select and perform an action
                 action = policy_net.select_action(state)
                 _, reward, done, _ = env.step(action.item())
+                                  
+                reward = reward_function(done, t)
+                
                 reward = torch.tensor([reward], device=device)
 
                 # Observe new state
@@ -252,7 +269,7 @@ class DQN(BaseNetwork):
                 policy_net.optimize_model(target_net)
                 if done:
                     episode_durations.append(t + 1)
-                    print(f"e: {policy_net._epsilon:.2}")
+                    print(f"e: {policy_net._epsilon:.2} t: {t}")
                     break
             # Update the target network, copying all weights and biases in DQN
             if len(episode_durations) > min_duration:
@@ -263,7 +280,7 @@ class DQN(BaseNetwork):
                 update_target = True
 
             if  update_target:
-                print(f'target updated {mv_avg:.2f}')
+                print(f'target updated {mv_avg:.3f}')
                 target_net.update_states(policy_net)
             elif policy_net._epsilon <= policy_net._conf.EPS_MIN: 
                 policy_net.update_states(target_net)
