@@ -269,7 +269,7 @@ class DQN(BaseNetwork):
                 state = next_state
 
                 # Perform one step of the optimization (on the policy network)
-                policy_net.optimize_model(target_net)
+                policy_net.optimize_model(policy_net)
                 if done:
                     episode_durations.append(t + 1)
                     print(f"e: {policy_net._epsilon:.2} t: {t}")
@@ -277,16 +277,16 @@ class DQN(BaseNetwork):
             # Update the target network, copying all weights and biases in DQN
             if len(episode_durations) > min_duration:
                 mv_avg = moving_average_pth(episode_durations, min_duration).max()
-                update_target = t > mv_avg
+                update_target = True
             else: 
                 mv_avg = 0.
                 update_target = True
 
-            if  update_target:
-                print(f'target updated {mv_avg:.3f}')
-                target_net.update_states(policy_net)
-            elif policy_net._epsilon <= policy_net._conf.EPS_MIN: 
-                policy_net.update_states(target_net)
-                policy_net._epsilon = policy_net._conf.EPS_START
+        if  update_target:
+            print(f'target updated {mv_avg:.3f}')
+            target_net.load_states_from(policy_net)
+        elif policy_net._epsilon <= policy_net._conf.EPS_MIN: 
+            policy_net.load_states_from(target_net)
+            policy_net._epsilon = policy_net._conf.EPS_START
 
         return episode_durations
