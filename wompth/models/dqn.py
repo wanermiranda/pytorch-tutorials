@@ -291,7 +291,7 @@ def fit_networks(
             mv_avg = moving_average_pth(episode_durations, conf.TARGET_UPDATE)
             last_mv_avg = float(mv_avg[-1])
             max_mv_avg = float(mv_avg.max())
-            update_target = last_mv_avg >= max_mv_avg
+            update_target =  (i_episode % conf.TARGET_UPDATE) == 0 #last_mv_avg >= max_mv_avg
             writer.add_scalar('MovingAvg/train', last_mv_avg, i_episode)
             writer.add_scalar('MaxMovingAvg/train', max_mv_avg, i_episode)
 
