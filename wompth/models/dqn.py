@@ -12,6 +12,11 @@ import torch.optim as optim
 from gym.core import Env
 from torch import nn
 
+
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import datasets, transforms
+
+
 from wompth.models.base import BaseNetwork
 
 Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
@@ -212,7 +217,7 @@ class DQN(BaseNetwork):
 
     @staticmethod
     def fit_networks(
-        policy_net, target_net, env: Env, get_screen: Callable, num_episodes=600, min_duration = 5, episode_durations = [], reward_function=None
+        policy_net, target_net, env: Env, get_screen: Callable, num_episodes=600, episode_durations = [], reward_function=None
     ) -> List:
         def moving_average_pth(x, w=10):
             kernel = [1/w] * w
@@ -235,8 +240,12 @@ class DQN(BaseNetwork):
         if not target_net:
             target_net = policy_net
 
+        conf = policy_net._conf
+
+        writer = SummaryWriter(comment=f'{"single" if not target_net else "double"}-{str(conf)}' )
+
+
         device = policy_net._device
-        
         reward_function = reward_function_local
         
         for i_episode in range(num_episodes):
@@ -269,25 +278,32 @@ class DQN(BaseNetwork):
                 state = next_state
 
                 # Perform one step of the optimization (on the policy network)
-                policy_net.optimize_model(policy_net)
+                if i_episode % conf.TARGET_UPDATE == 0:
+                    policy_net.optimize_model(policy_net)
+                
                 if done:
                     episode_durations.append(t + 1)
-                    print(f"e: {policy_net._epsilon:.2} t: {t}")
                     break
+            
+            writer.add_scalar('Epsilon/train', policy_net._epsilon , i_episode)
+            writer.add_scalar('Duration/train', t , i_episode)
+
             # Update the target network, copying all weights and biases in DQN
-            if len(episode_durations) > min_duration:
-                mv_avg = moving_average_pth(episode_durations, min_duration).max()
-                update_target = t > mv_avg
-            else: 
-                mv_avg = 0.
-                update_target = True
+            if i_episode >= conf.TARGET_UPDATE:
+                mv_avg = moving_average_pth(episode_durations, conf.TARGET_UPDATE)
+                last_mv_avg = float(mv_avg[-1])
+                max_mv_avg = float(mv_avg.max())
+                update_target = last_mv_avg >= max_mv_avg
+                writer.add_scalar('MovingAvg/train', last_mv_avg, i_episode)
+                writer.add_scalar('MaxMovingAvg/train', max_mv_avg, i_episode)
 
-            if  update_target and update_target:
-                print(f'target updated {mv_avg:.3f}')
-                target_net.load_states_from(policy_net)
+                if update_target:
+                    target_net.load_states_from(policy_net)
 
-        if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
-            policy_net.load_states_from(target_net)
-            policy_net._epsilon = policy_net._conf.EPS_START
+            if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
+                policy_net.load_states_from(target_net)
+                policy_net._epsilon = policy_net._conf.EPS_START
+
+        writer.close()
 
         return episode_durations
