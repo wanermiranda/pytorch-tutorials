@@ -31,7 +31,6 @@ class DQNConf:
     BATCH_SIZE: float = 128
     GAMMA: float = 0.999
     EPS_START: float = .9
-    EPS_MIN: float = 0.05
     MAX_EPISODES: int = 1000
     TARGET_UPDATE: int = 10
 
@@ -306,10 +305,6 @@ def fit_networks(
             if last_mv_avg > 200: 
                 writer.close()
                 return episode_durations
-
-        if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
-            policy_net.load_states_from(target_net)
-            policy_net._epsilon = policy_net._conf.EPS_START
 
     writer.close()
 
