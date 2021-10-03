@@ -215,6 +215,10 @@ class DQN(BaseNetwork):
             param.grad.data.clamp_(-1, 1)
         self._optimizer.step()
 
+    def load_states_from(self, source_net):
+        super().load_states_from(source_net)
+        self._memory = source_net._memory
+
 def fit_networks(
     policy_net:DQN, target_net:DQN, env: Env, get_screen: Callable, num_episodes=600, episode_durations = [], reward_function=None
 ) -> List:
@@ -297,7 +301,6 @@ def fit_networks(
 
             if update_target:
                 target_net.load_states_from(policy_net)
-                target_net._memory = policy_net._memory
 
             if last_mv_avg > 200: 
                 writer.close()
