@@ -215,95 +215,98 @@ class DQN(BaseNetwork):
             param.grad.data.clamp_(-1, 1)
         self._optimizer.step()
 
-    @staticmethod
-    def fit_networks(
-        policy_net, target_net, env: Env, get_screen: Callable, num_episodes=600, episode_durations = [], reward_function=None
-    ) -> List:
-        def moving_average_pth(x, w=10):
-            kernel = [1/w] * w
-            ts_tensor = torch.Tensor(x).reshape(1, 1, -1)
-            kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
-            return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
+def fit_networks(
+    policy_net:DQN, target_net:DQN, env: Env, get_screen: Callable, num_episodes=600, episode_durations = [], reward_function=None
+) -> List:
+    def moving_average_pth(x, w=10):
+        kernel = [1/w] * w
+        ts_tensor = torch.Tensor(x).reshape(1, 1, -1)
+        kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
+        return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
 
-        def reward_function_local(done, t, step_reward=50):
-            reward = 0
-            
-            if done and t < step_reward:
-                reward =  step_reward - (t * 0.5) # discounted half of the steps
-            elif t >= step_reward: 
-                reward = t * ((step_reward // t)+1) # promote the reward in steps 
-            else: 
-                reward = t
-            
-            return reward 
-
-        if not target_net:
-            target_net = policy_net
-
-        conf = policy_net._conf
-
-        writer = SummaryWriter(comment=f'{"single" if not target_net else "double"}-{str(conf)}' )
-
-
-        device = policy_net._device
-        reward_function = reward_function_local
+    def reward_function_local(done, t, step_reward=50):
+        reward = 0
         
-        for i_episode in range(num_episodes):
-            # Initialize the environment and state
-            env.reset()
-            last_screen = get_screen()
-            current_screen = get_screen()
-            state = current_screen - last_screen
-            for t in count():
-                # Select and perform an action
-                action = policy_net.select_action(state)
-                _, reward, done, _ = env.step(action.item())
-                                  
-                reward = reward_function(done, t)
-                
-                reward = torch.tensor([reward], device=device)
+        if done and t < step_reward:
+            reward =  step_reward - (t * 0.5) # discounted half of the steps
+        elif t >= step_reward: 
+            reward = t * ((step_reward // t)+1) # promote the reward in steps 
+        else: 
+            reward = t
+        
+        return reward 
 
-                # Observe new state
-                last_screen = current_screen
-                current_screen = get_screen()
-                if not done:
-                    next_state = current_screen - last_screen
-                else:
-                    next_state = None
+    if not target_net:
+        target_net = policy_net
 
-                # Store the transition in memory
-                policy_net._memory.push(state, action, next_state, reward)
+    conf = policy_net._conf
 
-                # Move to the next state
-                state = next_state
+    writer = SummaryWriter(comment=f'{"single" if not target_net else "double"}-{str(conf)}' )
 
-                # Perform one step of the optimization (on the policy network)
-                if i_episode % conf.TARGET_UPDATE == 0:
-                    policy_net.optimize_model(policy_net)
-                
-                if done:
-                    episode_durations.append(t + 1)
-                    break
+
+    device = policy_net._device
+    reward_function = reward_function_local
+    
+    for i_episode in range(num_episodes):
+        # Initialize the environment and state
+        env.reset()
+        last_screen = get_screen()
+        current_screen = get_screen()
+        state = current_screen - last_screen
+        for t in count():
+            # Select and perform an action
+            action = policy_net.select_action(state)
+            _, reward, done, _ = env.step(action.item())
+                                
+            reward = reward_function(done, t)
             
-            writer.add_scalar('Epsilon/train', policy_net._epsilon , i_episode)
-            writer.add_scalar('Duration/train', t , i_episode)
+            reward = torch.tensor([reward], device=device)
 
-            # Update the target network, copying all weights and biases in DQN
-            if i_episode >= conf.TARGET_UPDATE:
-                mv_avg = moving_average_pth(episode_durations, conf.TARGET_UPDATE)
-                last_mv_avg = float(mv_avg[-1])
-                max_mv_avg = float(mv_avg.max())
-                update_target = last_mv_avg >= max_mv_avg
-                writer.add_scalar('MovingAvg/train', last_mv_avg, i_episode)
-                writer.add_scalar('MaxMovingAvg/train', max_mv_avg, i_episode)
+            # Observe new state
+            last_screen = current_screen
+            current_screen = get_screen()
+            if not done:
+                next_state = current_screen - last_screen
+            else:
+                next_state = None
 
-                if update_target:
-                    target_net.load_states_from(policy_net)
+            # Store the transition in memory
+            policy_net._memory.push(state, action, next_state, reward)
 
-            if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
-                policy_net.load_states_from(target_net)
-                policy_net._epsilon = policy_net._conf.EPS_START
+            # Move to the next state
+            state = next_state
 
-        writer.close()
+            # Perform one step of the optimization (on the policy network)
+            policy_net.optimize_model(target_net)
+            
+            if done:
+                episode_durations.append(t + 1)
+                break
+        
+        writer.add_scalar('Epsilon/train', policy_net._epsilon , i_episode)
+        writer.add_scalar('Duration/train', t , i_episode)
 
-        return episode_durations
+        # Update the target network, copying all weights and biases in DQN
+        if i_episode >= conf.TARGET_UPDATE:
+            mv_avg = moving_average_pth(episode_durations, conf.TARGET_UPDATE)
+            last_mv_avg = float(mv_avg[-1])
+            max_mv_avg = float(mv_avg.max())
+            update_target = last_mv_avg >= max_mv_avg
+            writer.add_scalar('MovingAvg/train', last_mv_avg, i_episode)
+            writer.add_scalar('MaxMovingAvg/train', max_mv_avg, i_episode)
+
+            if update_target:
+                target_net.load_states_from(policy_net)
+                target_net._memory = policy_net._memory
+
+            if last_mv_avg > 200: 
+                writer.close()
+                return episode_durations
+
+        if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
+            policy_net.load_states_from(target_net)
+            policy_net._epsilon = policy_net._conf.EPS_START
+
+    writer.close()
+
+    return episode_durations
