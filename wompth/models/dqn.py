@@ -239,17 +239,7 @@ def fit_networks(
         kernel_tensor = torch.Tensor(kernel).reshape(1, 1, -1)
         return F.conv1d(ts_tensor, kernel_tensor).reshape(-1)
 
-    def reward_function_local(done, t, step_reward=50):
-        reward = 0
-        
-        if done and t < step_reward:
-            reward =  step_reward - (t * 0.5) # discounted half of the steps
-        elif t >= step_reward: 
-            reward = t * ((step_reward // t)+1) # promote the reward in steps 
-        else: 
-            reward = t
-        
-        return reward 
+
     policy_net._max_episodes = num_episodes
     if not target_net:
         target_net = policy_net
@@ -258,9 +248,7 @@ def fit_networks(
 
     writer = SummaryWriter(comment=f'{"single" if not target_net else "double"}-{str(conf)}' )
 
-
     device = policy_net._device
-    reward_function = reward_function_local
     
     for i_episode in range(num_episodes):
         # Initialize the environment and state
@@ -272,9 +260,10 @@ def fit_networks(
         for t in count():
             # Select and perform an action
             action = policy_net.select_action(state)
-            _, _, done, _ = env.step(action.item())
-                                
-            reward = reward_function(done, t)
+            _, reward, done, _ = env.step(action.item())
+
+            if reward_function:   
+                reward = reward_function(done, t)
             
             reward = torch.tensor([reward], device=device)
 
@@ -318,6 +307,9 @@ def fit_networks(
                 writer.close()
                 return episode_durations
 
+        if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
+            policy_net.load_states_from(target_net)
+            policy_net._epsilon = policy_net._conf.EPS_START
 
     writer.close()
 
