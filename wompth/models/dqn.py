@@ -272,9 +272,9 @@ def fit_networks(
         for t in count():
             # Select and perform an action
             action = policy_net.select_action(state)
-            _, reward, done, _ = env.step(action.item())
+            _, _, done, _ = env.step(action.item())
                                 
-            # reward = reward_function(done, t)
+            reward = reward_function(done, t)
             
             reward = torch.tensor([reward], device=device)
 
@@ -318,9 +318,6 @@ def fit_networks(
                 writer.close()
                 return episode_durations
 
-        if policy_net._epsilon <= policy_net._conf.EPS_MIN: 
-            policy_net.load_states_from(target_net)
-            policy_net._epsilon = policy_net._conf.EPS_START
 
     writer.close()
 
