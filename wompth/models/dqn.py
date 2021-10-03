@@ -146,16 +146,16 @@ class DQN(BaseNetwork):
         return self._head(x.view(x.size(0), -1))
 
 
-    def epsilon_2(self, A=0.3, B=0.1, C=0.1):
+    def epsilon(self, A=0.5, B=0.1, C=0.1):
         conf = self._conf 
 
         standardized_time=(self._episodes_done-A*conf.MAX_EPISODES)/(B*conf.MAX_EPISODES)
         standardized_time = torch.tensor(math.exp(-standardized_time), dtype=torch.double, device=self._device)
         cosh=torch.cosh(standardized_time)
         epsilon=1.1-(1/cosh+(self._episodes_done*C/conf.MAX_EPISODES))
-        return epsilon 
+        return epsilon * conf.EPS_START
 
-    def epsilon(self):
+    def epsilon_1(self):
         conf = self._conf 
         epsilon = conf.EPS_MIN + (conf.EPS_START - conf.EPS_MIN) * \
                     math.exp(-1. * self._episodes_done / conf.MAX_EPISODES)
