@@ -29,10 +29,10 @@ ScreenDims = namedtuple("ScreenDims", ("height", "width"))
 @dataclass
 class DQNConf:
     BATCH_SIZE: float = 128
-    GAMMA: float = 0.99
-    EPS_START: float = 1.0
-    EPS_MIN: float = 0.001
-    EPS_DECAY: int = 0.999
+    GAMMA: float = 0.999
+    EPS_START: float = .9
+    EPS_MIN: float = 0.05
+    MAX_EPISODES: int = 1000
     TARGET_UPDATE: int = 10
 
 
@@ -69,7 +69,7 @@ class DQN(BaseNetwork):
         self._outputs = outputs
         self._activation_func = activation_func
         self._conf = conf
-        self._steps_done = 0
+        self._episodes_done = 0
         self._epsilon  = conf.EPS_START
         self._optimizer_partial = optimizer_partial
         self._memory = memory
@@ -146,11 +146,26 @@ class DQN(BaseNetwork):
         return self._head(x.view(x.size(0), -1))
 
 
-    def select_action(self, state): 
+    def epsilon_2(self, A=0.3, B=0.1, C=0.1):
+        conf = self._conf 
+
+        standardized_time=(self._episodes_done-A*conf.MAX_EPISODES)/(B*conf.MAX_EPISODES)
+        standardized_time = torch.tensor(math.exp(-standardized_time), dtype=torch.double, device=self._device)
+        cosh=torch.cosh(standardized_time)
+        epsilon=1.1-(1/cosh+(self._episodes_done*C/conf.MAX_EPISODES))
+        return epsilon 
+
+    def epsilon(self):
+        conf = self._conf 
+        epsilon = conf.EPS_MIN + (conf.EPS_START - conf.EPS_MIN) * \
+                    math.exp(-1. * self._episodes_done / conf.MAX_EPISODES)
+
+        return epsilon
+
+    def select_action(self, state):
+    
         sample = random.random()
-        conf = self._conf
-        if self._epsilon  > conf.EPS_MIN:
-            self._epsilon *= conf.EPS_DECAY
+        self._epsilon = self.epsilon()
 
         if sample > self._epsilon:
             with torch.no_grad():
@@ -218,6 +233,7 @@ class DQN(BaseNetwork):
     def load_states_from(self, source_net):
         super().load_states_from(source_net)
         self._memory = source_net._memory
+        # self._steps_done = source_net._steps_done
 
 def fit_networks(
     policy_net:DQN, target_net:DQN, env: Env, get_screen: Callable, num_episodes=600, episode_durations = [], reward_function=None
@@ -239,7 +255,7 @@ def fit_networks(
             reward = t
         
         return reward 
-
+    policy_net._max_episodes = num_episodes
     if not target_net:
         target_net = policy_net
 
@@ -257,12 +273,13 @@ def fit_networks(
         last_screen = get_screen()
         current_screen = get_screen()
         state = current_screen - last_screen
+        policy_net._episodes_done = i_episode
         for t in count():
             # Select and perform an action
             action = policy_net.select_action(state)
             _, reward, done, _ = env.step(action.item())
                                 
-            reward = reward_function(done, t)
+            # reward = reward_function(done, t)
             
             reward = torch.tensor([reward], device=device)
 
