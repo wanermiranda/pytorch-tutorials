@@ -60,7 +60,7 @@ class DQN(BaseNetwork):
         super().__init__(device=device)
         self._conf = conf
         self._episodes_done = 0
-        self._outputs = 2
+        self._outputs = outputs
         self._epsilon  = conf.EPS_START
         self._optimizer_partial = optimizer_partial
         self._memory = memory
