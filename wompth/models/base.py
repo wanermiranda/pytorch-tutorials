@@ -52,6 +52,14 @@ class BaseNetwork(nn.Module):
 
     def load_states_from(self, source_net):
         self.load_state_dict(source_net.state_dict())
+
+    
+    def save(self, path: str):
+        file_dict = {
+            "state": self.state_dict(),
+            "_device": self._device,
+        }
+        torch.save(file_dict, path)
         
 class NeuralNetwork(BaseNetwork):
     def __init__(

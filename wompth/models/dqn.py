@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from gym.core import Env
 from torch import nn
-
+import copy
 
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
@@ -147,7 +147,7 @@ class DQN(BaseNetwork):
 
     def load_states_from(self, source_net):
         super().load_states_from(source_net)
-        self._memory = source_net._memory
+        self._memory = copy.deepcopy(source_net._memory)
         # self._steps_done = source_net._steps_done
 
 def fit_networks(
@@ -220,9 +220,15 @@ def fit_networks(
             writer.add_scalar('MovingAvg/train', last_mv_avg, i_episode)
             writer.add_scalar('MaxMovingAvg/train', max_mv_avg, i_episode)
 
+
+            if last_mv_avg == max_mv_avg: 
+                policy_net.save(f'model_{i_episode}_avg_{last_mv_avg}.pth')
+
+
             if update_target:
                 target_net.load_states_from(policy_net)
 
+            
             if last_mv_avg > 200: 
                 writer.close()
                 return episode_durations
