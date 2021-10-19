@@ -53,7 +53,7 @@ class DQN(BaseNetwork):
         self,
         device="cuda",
         conf: DQNConf = DQNConf(),
-        optimizer_partial=partial(optim.RMSprop),
+        optimizer_partial=partial(optim.Adam),
         memory=ReplayMemory(10000),
         outputs=2,
     ):
@@ -141,8 +141,7 @@ class DQN(BaseNetwork):
         # Optimize the model
         self._optimizer.zero_grad()
         loss.backward()
-        for param in self.parameters():
-            param.grad.data.clamp_(-1, 1)
+
         self._optimizer.step()
 
     def load_states_from(self, source_net):
@@ -169,7 +168,8 @@ def fit_networks(
     writer = SummaryWriter(comment=f'{"single" if not target_net else "double"}-{str(conf)}' )
 
     device = policy_net._device
-    
+    initial_gamma = conf.GAMMA
+
     for i_episode in range(num_episodes):
         # Initialize the environment and state
         env.reset()
@@ -177,6 +177,7 @@ def fit_networks(
         current_screen = get_screen()
         state = current_screen - last_screen
         policy_net._episodes_done = i_episode
+        reward_sum = 0
         for t in count():
             # Select and perform an action
             action = policy_net.select_action(state)
@@ -185,8 +186,9 @@ def fit_networks(
             if reward_function:   
                 reward = reward_function(done, t)
             
-            reward = torch.tensor([reward], device=device)
+            reward_sum += reward
 
+            reward = torch.tensor([reward], device=device)
             # Observe new state
             last_screen = current_screen
             current_screen = get_screen()
@@ -210,7 +212,14 @@ def fit_networks(
         
         writer.add_scalar('Epsilon/train', policy_net._epsilon , i_episode)
         writer.add_scalar('Duration/train', t , i_episode)
+        writer.add_scalar('Reward/train', reward_sum , i_episode)
+        writer.add_scalar('Gamma/train', conf.GAMMA , i_episode)
 
+        # conf.GAMMA = initial_gamma * (1
+        # 
+        # 
+        # .0 - ((float(i_episode // conf.TARGET_UPDATE) * conf.TARGET_UPDATE) / float(conf.MAX_EPISODES)))
+        
         # Update the target network, copying all weights and biases in DQN
         if i_episode >= conf.TARGET_UPDATE:
             mv_avg = moving_average_pth(episode_durations, conf.TARGET_UPDATE)
