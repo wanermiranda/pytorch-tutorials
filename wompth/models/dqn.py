@@ -94,7 +94,7 @@ class DQN(BaseNetwork):
             )
 
         
-    def optimize_model(self, target_net, criterion=nn.HuberLoss()):
+    def optimize_model(self, target_net, criterion=nn.MSELoss()):
         conf = self._conf
         if len(self._memory) < conf.BATCH_SIZE:
             return
